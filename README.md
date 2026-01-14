@@ -3,11 +3,7 @@
 ## Affected Versions
 
 **Vulnerable:**
-- XWorm v6.4 and earlier (confirmed)
-- XWorm v6.5 (confirmed)
-
-**Not Tested:**
-- XWorm v7.2 (no reliable cracked version available for testing)
+- XWorm v7.2 and earlier 
 
 ## What is Vulnerable
 
