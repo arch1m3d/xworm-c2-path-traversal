@@ -6,7 +6,7 @@
 
 ## What is Vulnerable
 
-The XWorm C2 server accepts Recovery messages from any connected client without requiring the C2 to first request the data, and uses the client-supplied HWID directly in file path construction with **ZERO validation**, allowing arbitrary absolute path writes anywhere on the C2 filesystem.
+The XWorm C2 server accepts Recovery messages from any connected client without requiring the C2 to first request the data, and uses the client-supplied HWID directly in file path construction with zero validation, allowing arbitrary absolute path writes anywhere on the C2 filesystem.
 
 When a client sends recovery data (stolen credentials, browser data, etc.), the C2 server uses the client's HWID (Hardware ID) to construct a file path. This HWID has no validation whatsoever - it accepts both relative path traversal sequences (`..\..\..`) and absolute paths (`C:\Target`). The C2 processes these Recovery messages immediately upon receipt without any authentication or validation that the client was actually asked to send this data.
 
