@@ -127,3 +127,25 @@ All recovery types write `.txt` files with different names:
 **Result:**
 
 Files are written to: `<ABSOLUTE_PATH>\Recovery\<name>_<timestamp>.txt`
+
+
+## ⚠️ Disclaimer
+This repository contains a proof-of-concept (PoC) for educational and security research purposes only.
+Intended Use:
+
+- Academic research and learning
+- Threat intelligence analysis
+- Security awareness and defensive research
+- Understanding adversary infrastructure weaknesses
+
+Important Notice:
+
+This PoC is provided for educational purposes only
+Unauthorized access to computer systems is illegal
+Users are responsible for ensuring their use complies with all applicable laws and regulations
+The author assumes no liability for misuse of this information
+This research targets known malicious infrastructure and is not intended for use against legitimate systems
+
+Responsible Use:
+By using this code, you agree to use it solely for lawful security research, education, and defensive purposes. Any malicious or unauthorized use is strictly prohibited and violates the intended purpose of this research.
+
